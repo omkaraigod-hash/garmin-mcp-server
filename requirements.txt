@@ -1,0 +1,5 @@
+garminconnect
+mcp[cli]
+fastmcp
+uvicorn
+starlette
