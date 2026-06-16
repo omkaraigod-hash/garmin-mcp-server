@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import asyncio
 from datetime import date, timedelta
 from garminconnect import Garmin
@@ -10,11 +11,16 @@ from starlette.routing import Route, Mount
 from starlette.requests import Request
 import uvicorn
 
-# Auth
-email = os.environ["GARMIN_EMAIL"]
-password = os.environ["GARMIN_PASSWORD"]
+# Auth using pre-generated tokens
+tokens_b64 = os.environ.get("GARMIN_TOKENS_B64")
+if tokens_b64:
+    tokens = json.loads(base64.b64decode(tokens_b64).decode())
+    os.makedirs(os.path.expanduser("~/.garminconnect"), exist_ok=True)
+    for filename, content in tokens.items():
+        with open(os.path.expanduser(f"~/.garminconnect/{filename}"), "w") as f:
+            f.write(content)
 
-client = Garmin(email, password)
+client = Garmin(os.environ["GARMIN_EMAIL"], os.environ["GARMIN_PASSWORD"])
 client.login()
 
 mcp = FastMCP("Garmin MCP")
@@ -59,14 +65,11 @@ async def handle_sse(request: Request):
     async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
         await mcp.run(streams[0], streams[1], mcp.create_initialization_options())
 
-async def handle_messages(request: Request):
-    await sse.handle_post_message(request.scope, request.receive, request._send)
-
 app = Starlette(routes=[
     Route("/sse", endpoint=handle_sse),
     Mount("/messages/", app=sse.handle_post_message),
 ])
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)
